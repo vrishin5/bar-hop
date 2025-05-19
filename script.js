@@ -1,8 +1,16 @@
+// Global handler for uncaught promise rejections from the Places API
+window.addEventListener('unhandledrejection', event => {
+  console.error('Unhandled promise rejection:', event.reason);
+  document.getElementById('status').textContent = `Error: ${event.reason.message || event.reason}`;
+});
+
 const statusDiv = document.getElementById('status');
 const barList   = document.getElementById('bar-list');
 let map, service;
 
-// 1. Get user location
+// Kick things off on load
+window.addEventListener('load', init);
+
 function init() {
   if (!navigator.geolocation) {
     statusDiv.textContent = 'Geolocation not supported.';
@@ -15,14 +23,15 @@ function init() {
       statusDiv.textContent = `You’re at ${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
       initMap({ lat: latitude, lng: longitude });
     },
-    () => {
+    err => {
+      console.error('Geolocation error:', err);
       statusDiv.textContent = 'Unable to retrieve location.';
     }
   );
 }
 
-// 2. Initialize map and PlacesService
 function initMap(center) {
+  console.log('initMap center:', center);
   map = new google.maps.Map(document.getElementById('map'), {
     center,
     zoom: 15,
@@ -30,36 +39,40 @@ function initMap(center) {
 
   service = new google.maps.places.PlacesService(map);
 
-  // 3. Search for nearby bars
+  // Perform the nearby search with a callback that handles status
   service.nearbySearch(
     {
       location: center,
       radius: 1000,
       type: ['bar'],
     },
-    handleResults
+    (results, status) => {
+      console.log('PlacesService status:', status, 'results:', results);
+      if (status !== google.maps.places.PlacesServiceStatus.OK) {
+        statusDiv.textContent = `Places API error: ${status}`;
+        return;
+      }
+      handleResults(results);
+    }
   );
 }
 
-// 4. Handle the API results
-function handleResults(results, status) {
-  if (status !== google.maps.places.PlacesServiceStatus.OK) {
-    statusDiv.textContent = 'Failed to fetch nearby bars.';
+function handleResults(results) {
+  barList.innerHTML = '';
+  if (!results || results.length === 0) {
+    statusDiv.textContent = 'No bars found nearby.';
     return;
   }
 
-  // clear previous list
-  barList.innerHTML = '';
-
   results.forEach(place => {
-    // add marker
+    // Marker
     new google.maps.Marker({
       map,
       position: place.geometry.location,
       title: place.name
     });
 
-    // add to list
+    // List item
     const li = document.createElement('li');
     li.innerHTML = `
       <strong>${place.name}</strong>
@@ -69,6 +82,3 @@ function handleResults(results, status) {
     barList.appendChild(li);
   });
 }
-
-// kick things off
-window.addEventListener('load', init);
