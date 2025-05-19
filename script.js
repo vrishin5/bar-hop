@@ -15,7 +15,12 @@ function init() {
       const { latitude, longitude } = pos.coords;
       statusDiv.textContent =
         `You’re at ${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
-      initMap({ lat: latitude, lng: longitude });
+
+      // Wrap in LatLng object to guarantee valid type
+      const center = new google.maps.LatLng(latitude, longitude);
+      console.log('Geolocation center:', center.toString());
+
+      initMap(center);
     },
     err => {
       console.error('Geolocation error:', err);
@@ -31,55 +36,68 @@ function initMap(center) {
   );
   service = new google.maps.places.PlacesService(map);
 
-  const request = { location: center, radius: 1000, type: ['bar'] };
+  const request = {
+    location: center,
+    radius:   1000,       // meters
+    type:     ['bar'],    // must be an array of valid place types
+  };
+
+  console.log('🚀 nearbySearch request:', {
+    location: request.location.toString(),
+    radius:   request.radius,
+    type:     request.type
+  });
 
   searchNearby(request)
     .then(results => {
+      console.log('✅ nearbySearch results count:', results.length);
       if (results.length === 0) {
-        statusDiv.textContent = 'No bars found nearby.';
+        statusDiv.textContent = 'No bars found within 1 km.';
       } else {
         handleResults(results);
       }
     })
     .catch(err => {
-      console.error('Places search error:', err);
+      console.error('❌ Places search error:', err);
+      // Display the *exact* error message from Google
       statusDiv.textContent = `Places API error: ${err.message}`;
     });
 }
 
-/**
- * Wraps service.nearbySearch in your own Promise so you catch everything.
- */
 function searchNearby(request) {
   return new Promise((resolve, reject) => {
     try {
-      service.nearbySearch(request, (results, status) => {
-        console.log('PlacesService status:', status, 'results:', results);
+      const maybePromise = service.nearbySearch(request, (results, status) => {
+        console.log('⏳ PlacesService callback status:', status);
         if (status !== google.maps.places.PlacesServiceStatus.OK) {
-          reject(new Error(status));
-        } else {
-          resolve(results);
+          // Reject with the status string so you know exactly which one it is
+          return reject(new Error(status));
         }
+        resolve(results);
       });
-    } catch (err) {
-      reject(err);
+
+      // If the library returns a Promise internally, catch that too
+      if (maybePromise && typeof maybePromise.catch === 'function') {
+        maybePromise.catch(innerErr => {
+          reject(innerErr);
+        });
+      }
+    } catch (syncErr) {
+      reject(syncErr);
     }
   });
 }
 
 function handleResults(results) {
-  // clear out old items
   barList.innerHTML = '';
 
   results.forEach(place => {
-    // add a marker
     new google.maps.Marker({
       map,
       position: place.geometry.location,
       title:    place.name,
     });
 
-    // add to list
     const li = document.createElement('li');
     li.innerHTML = `
       <strong>${place.name}</strong><br/>
