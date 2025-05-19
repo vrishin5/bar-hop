@@ -1,10 +1,3 @@
-// 1) Catch any unhandled promise rejections
-window.addEventListener('unhandledrejection', event => {
-  console.error('Unhandled promise rejection:', event.reason);
-  document.getElementById('status').textContent =
-    `Error: ${event.reason?.message || event.reason}`;
-});
-
 const statusDiv = document.getElementById('status');
 const barList   = document.getElementById('bar-list');
 let map, service;
@@ -16,6 +9,7 @@ function init() {
     statusDiv.textContent = 'Geolocation not supported.';
     return;
   }
+
   navigator.geolocation.getCurrentPosition(
     pos => {
       const { latitude, longitude } = pos.coords;
@@ -31,65 +25,66 @@ function init() {
 }
 
 function initMap(center) {
-  console.log('initMap center:', center);
   map = new google.maps.Map(
     document.getElementById('map'),
     { center, zoom: 15 }
   );
   service = new google.maps.places.PlacesService(map);
 
-  const request = {
-    location: center,
-    radius:   1000,
-    type:     ['bar'],
-  };
+  const request = { location: center, radius: 1000, type: ['bar'] };
 
-  // 2) Wrap in try/catch for sync errors
-  try {
-    // 3) Get return value in case it's a Promise
-    const maybePromise = service.nearbySearch(request, (results, status) => {
-      console.log('PlacesService status:', status, 'results:', results);
-      if (status !== google.maps.places.PlacesServiceStatus.OK) {
-        statusDiv.textContent = `Places API error: ${status}`;
-        return;
+  searchNearby(request)
+    .then(results => {
+      if (results.length === 0) {
+        statusDiv.textContent = 'No bars found nearby.';
+      } else {
+        handleResults(results);
       }
-      handleResults(results);
+    })
+    .catch(err => {
+      console.error('Places search error:', err);
+      statusDiv.textContent = `Places API error: ${err.message}`;
     });
+}
 
-    // 4) If it is a Promise, catch rejects here
-    if (maybePromise && typeof maybePromise.catch === 'function') {
-      maybePromise.catch(err => {
-        console.error('Nearby search promise error:', err);
-        statusDiv.textContent = 
-          `Places API error: ${err.message || err}`;
+/**
+ * Wraps service.nearbySearch in your own Promise so you catch everything.
+ */
+function searchNearby(request) {
+  return new Promise((resolve, reject) => {
+    try {
+      service.nearbySearch(request, (results, status) => {
+        console.log('PlacesService status:', status, 'results:', results);
+        if (status !== google.maps.places.PlacesServiceStatus.OK) {
+          reject(new Error(status));
+        } else {
+          resolve(results);
+        }
       });
+    } catch (err) {
+      reject(err);
     }
-
-  } catch (err) {
-    console.error('Nearby search threw:', err);
-    statusDiv.textContent = `Places API error: ${err.message || err}`;
-  }
+  });
 }
 
 function handleResults(results) {
+  // clear out old items
   barList.innerHTML = '';
-  if (!results || results.length === 0) {
-    statusDiv.textContent = 'No bars found nearby.';
-    return;
-  }
 
   results.forEach(place => {
+    // add a marker
     new google.maps.Marker({
       map,
       position: place.geometry.location,
-      title:    place.name
+      title:    place.name,
     });
 
+    // add to list
     const li = document.createElement('li');
     li.innerHTML = `
       <strong>${place.name}</strong><br/>
       ${place.vicinity || 'Address N/A'}<br/>
-      Rating: ${place.rating || 'N/A'}
+      Rating: ${place.rating ?? 'N/A'}
     `;
     barList.appendChild(li);
   });
