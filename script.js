@@ -38,7 +38,7 @@ function initMap(center) {
 
   const request = {
     location: center,
-    radius:   1000,       // meters
+    radius:   10000,       // meters
     type:     ['bar'],    // must be an array of valid place types
   };
 
