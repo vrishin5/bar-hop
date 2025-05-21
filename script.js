@@ -90,7 +90,7 @@ function initMap(center) {
     // Set up the search request
     const request = {
       location: center,
-      radius: 1000,       // 1000 meters = 1km
+      radius: 10000,       // 1000 meters = 1km
       type: ['bar'],      // Search for bars
       rankBy: google.maps.places.RankBy.PROMINENCE
     };
